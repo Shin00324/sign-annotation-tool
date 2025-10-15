@@ -18,7 +18,7 @@ import type { Task } from '../App';
 
 // --- 您需要修改这里 ---
 // 请将下面的 URL 替换为您自己的 Cloudflare R2 存储桶的公开访问 URL
-const R2_BASE_URL = "https://sign-annotation-videos.r2.dev"; 
+const R2_BASE_URL = "https://pub-1614b7bb5b3540b9898ae99f84787635.r2.dev/"; 
 // --------------------
 
 interface VideoPanelProps {
