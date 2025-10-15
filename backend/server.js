@@ -1,4 +1,3 @@
-// filepath: c:\Users\ASUS\Desktop\手语标注工具\sign-annotation-tool\backend\server.js
 import express from 'express';
 import http from 'http';
 import { Server } from 'socket.io';
@@ -6,19 +5,15 @@ import cors from 'cors';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import fs from 'fs';
-import pg from 'pg'; // 引入新的 pg 包
+import pg from 'pg';
 
 const { Pool } = pg;
 
-// --- Database Setup ---
-// Render 会自动注入 DATABASE_URL 环境变量，指向我们创建的 PostgreSQL 数据库
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
-  // 如果在 Render 上部署，需要启用 SSL
   ssl: process.env.RENDER_INSTANCE_ID ? { rejectUnauthorized: false } : false,
 });
 
-// 检查并创建 annotations 表
 async function setupDatabase() {
   const client = await pool.connect();
   try {
@@ -61,12 +56,14 @@ const io = new Server(httpServer, { cors: corsOptions });
 const PORT = process.env.PORT || 3001;
 
 async function startServer() {
-  await setupDatabase(); // 启动服务器前先设置好数据库
+  await setupDatabase();
 
   app.use(cors(corsOptions));
   app.use(express.json());
-  app.use(express.static(path.join(__dirname, 'public')));
-  app.use(express.static(path.join(__dirname, '..', 'dist')));
+  
+  // **关键修改**: 移除了托管静态文件的代码
+  // app.use(express.static(path.join(__dirname, 'public')));
+  // app.use(express.static(path.join(__dirname, '..', 'dist')));
 
   io.on('connection', (socket) => console.log('A user connected:', socket.id));
 
@@ -155,11 +152,10 @@ async function startServer() {
     }
   });
 
-  // ... 其他端点保持不变 ...
-
-  app.get(/^\/(?!api).*/, (req, res) => {
-    res.sendFile(path.join(__dirname, '..', 'dist', 'index.html'));
-  });
+  // **关键修改**: 移除了捕获所有非API请求的路由
+  // app.get(/^\/(?!api).*/, (req, res) => {
+  //   res.sendFile(path.join(__dirname, '..', 'dist', 'index.html'));
+  // });
 
   httpServer.listen(PORT, () => console.log(`Server is running on http://localhost:${PORT}`));
 }
