@@ -1,4 +1,4 @@
-import React, { useRef, useState, useEffect } from 'react';
+import { useRef, useState, useEffect } from 'react';
 import {
   Box,
   Paper,
@@ -18,11 +18,8 @@ import type { Task } from '../App';
 
 // --- 您需要修改这里 ---
 // 请将下面的 URL 替换为您自己的 Cloudflare R2 存储桶的公开访问 URL
-const R2_BASE_URL = "https://pub-1614b7bb5b3540b9898ae99f84787635.r2.dev"; 
+const R2_BASE_URL = "https://sign-annotation-videos.r2.dev"; 
 // --------------------
-
-// 后端 API 的 URL 保持不变
-const API_URL = 'http://localhost:3001';
 
 interface VideoPanelProps {
   task: Task | null;
@@ -39,13 +36,10 @@ const formatTime = (time: number) => {
   return time.toFixed(3);
 };
 
-// **新增功能**: 动态构建视频 URL 的辅助函数
 const getVideoUrl = (videoPath: string) => {
-  // 如果 videoPath 已经是完整的 URL，则直接返回
   if (videoPath.startsWith('http')) {
     return videoPath;
   }
-  // 否则，将其与 R2 基础 URL 拼接
   return `${R2_BASE_URL.replace(/\/$/, '')}/${videoPath}`;
 };
 
@@ -195,7 +189,6 @@ export const VideoPanel = ({
               width="100%"
               style={{ display: 'block', maxHeight: '40vh' }}
               key={task.id}
-              // **关键修改**: 使用辅助函数来构建最终的视频 URL
               src={getVideoUrl(task.video)}
             />
           </Box>

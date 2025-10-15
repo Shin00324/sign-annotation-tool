@@ -13,11 +13,27 @@ const __dirname = path.dirname(__filename);
 
 const app = express();
 const httpServer = http.createServer(app);
+
+// **关键修改**: 配置灵活的 CORS 策略
+const allowedOrigins = [
+  'http://localhost:5173', // 允许本地开发环境
+  process.env.FRONTEND_URL    // 允许来自 Render 环境变量中指定的前端 URL
+].filter(Boolean); // 过滤掉 undefined 的值
+
+const corsOptions = {
+  origin: function (origin, callback) {
+    // 如果请求源在白名单中，或者请求没有源（例如来自服务器本身或Postman），则允许
+    if (!origin || allowedOrigins.indexOf(origin) !== -1) {
+      callback(null, true);
+    } else {
+      callback(new Error('Not allowed by CORS'));
+    }
+  },
+  methods: ["GET", "POST", "PUT", "DELETE"]
+};
+
 const io = new Server(httpServer, {
-  cors: {
-    origin: "http://localhost:5173",
-    methods: ["GET", "POST", "PUT", "DELETE"] // 允许 PUT 方法
-  }
+  cors: corsOptions
 });
 
 const PORT = process.env.PORT || 3001;
@@ -54,7 +70,7 @@ async function getDb() {
 async function startServer() {
   await getDb();
 
-  app.use(cors());
+  app.use(cors(corsOptions)); // **关键修改**: 应用新的 CORS 配置
   app.use(express.json());
   app.use(express.static(path.join(__dirname, 'public')));
   app.use(express.static(path.join(__dirname, '..', 'dist')));
@@ -116,7 +132,6 @@ async function startServer() {
     res.status(201).json(newAnnotation);
   });
 
-  // **新增功能**: 更新一个已有的标注
   app.put('/api/annotations/:id', async (req, res) => {
     const db = await getDb();
     await db.read();
@@ -129,7 +144,6 @@ async function startServer() {
       return res.status(404).json({ message: 'Annotation not found' });
     }
 
-    // 只更新时间和我们关心的字段
     const originalAnnotation = db.data.annotations[annotationIndex];
     const updatedAnnotation = {
       ...originalAnnotation,
@@ -142,7 +156,7 @@ async function startServer() {
     console.log('Updated annotation:', updatedAnnotation);
 
     await db.write();
-    io.emit('annotations_updated'); // 广播变更
+    io.emit('annotations_updated');
     res.status(200).json(updatedAnnotation);
   });
 
