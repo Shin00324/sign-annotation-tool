@@ -1,0 +1,17 @@
+/* src/index.css */
+
+/* 我们只保留最基本的全局设置，移除所有可能影响布局的样式 */
+body {
+  margin: 0;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
+    'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
+    sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  background-color: #121212; /* 保持深色背景 */
+}
+
+/* 确保根元素和 body 占满整个屏幕高度 */
+#root, body, html {
+  height: 100%;
+}

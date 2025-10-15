@@ -1,0 +1,137 @@
+{
+  "annotations": [
+    {
+      "gloss": "早上好",
+      "startTime": 0,
+      "endTime": 1.004891,
+      "taskId": "csl_002",
+      "id": "anno_1758527264773"
+    },
+    {
+      "gloss": "下午好",
+      "startTime": 1.004891,
+      "endTime": 4.51186,
+      "taskId": "csl_002",
+      "id": "anno_1758527266765"
+    },
+    {
+      "gloss": "晚上好",
+      "startTime": 2.997034,
+      "endTime": 4.405657,
+      "taskId": "csl_002",
+      "id": "anno_1758527268174"
+    },
+    {
+      "gloss": "计算机",
+      "startTime": 0,
+      "endTime": 1.878293,
+      "taskId": "csl_003",
+      "id": "anno_1758527343805"
+    },
+    {
+      "gloss": "服务器",
+      "startTime": 1.878293,
+      "endTime": 3.326474,
+      "taskId": "csl_003",
+      "id": "anno_1758527345253"
+    },
+    {
+      "gloss": "数据库",
+      "startTime": 3.326474,
+      "endTime": 4.549846,
+      "taskId": "csl_003",
+      "id": "anno_1758527346477"
+    },
+    {
+      "gloss": "前端",
+      "startTime": 4.549846,
+      "endTime": 5.085881,
+      "taskId": "csl_003",
+      "id": "anno_1758527347013"
+    },
+    {
+      "gloss": "后端",
+      "startTime": 5.085881,
+      "endTime": 5.775602,
+      "taskId": "csl_003",
+      "id": "anno_1758527347703"
+    },
+    {
+      "gloss": "计算机",
+      "startTime": 0,
+      "endTime": 3.481217,
+      "taskId": "csl_004",
+      "id": "anno_1758527395846"
+    },
+    {
+      "gloss": "服务器",
+      "startTime": 3.481217,
+      "endTime": 5.761939,
+      "taskId": "csl_004",
+      "id": "anno_1758527398127"
+    },
+    {
+      "gloss": "数据库",
+      "startTime": 5.761939,
+      "endTime": 6.88,
+      "taskId": "csl_004",
+      "id": "anno_1758527399688"
+    },
+    {
+      "gloss": "计算机",
+      "startTime": 0,
+      "endTime": 0.549508,
+      "taskId": "csl_008",
+      "id": "anno_1758528738736"
+    },
+    {
+      "gloss": "服务器",
+      "startTime": 0.549508,
+      "endTime": 1.292839,
+      "taskId": "csl_008",
+      "id": "anno_1758528739479"
+    },
+    {
+      "gloss": "数据库",
+      "startTime": 1.292839,
+      "endTime": 1.886442,
+      "taskId": "csl_008",
+      "id": "anno_1758528740072"
+    },
+    {
+      "gloss": "前端",
+      "startTime": 1.886442,
+      "endTime": 2.397623,
+      "taskId": "csl_008",
+      "id": "anno_1758528740584"
+    },
+    {
+      "gloss": "后端",
+      "startTime": 2.397623,
+      "endTime": 2.878958,
+      "taskId": "csl_008",
+      "id": "anno_1758528741065"
+    },
+    {
+      "gloss": "新冠感染",
+      "startTime": 0,
+      "endTime": 4.485922,
+      "taskId": "csl_001",
+      "id": "anno_1760509534719"
+    },
+    {
+      "gloss": "传染",
+      "startTime": 4.485922,
+      "endTime": 5.983905,
+      "taskId": "csl_001",
+      "id": "anno_1760509536217"
+    },
+    {
+      "gloss": "厉害",
+      "startTime": 5.983905,
+      "endTime": 7.050092,
+      "taskId": "csl_001",
+      "id": "anno_1760509537283"
+    }
+  ]
+}
