@@ -1,10 +1,13 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import  { useState, useEffect, useCallback } from 'react';
 import { io } from 'socket.io-client';
 import { AppLayout } from './layout/AppLayout';
 import type { Annotation } from './data/annotations';
 import { ThemeProvider, createTheme, CssBaseline } from '@mui/material';
 
-const API_URL = 'http://localhost:3001';
+// **关键修改**: 使用环境变量来动态设置 API URL
+// 在本地开发时，Vite 会使用 'http://localhost:3001'
+// 在 Render 上，我们会设置一个环境变量指向部署的后端地址
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
 const socket = io(API_URL);
 
 export interface Task {
@@ -30,7 +33,6 @@ function App() {
   const [allAnnotations, setAllAnnotations] = useState<Annotation[]>([]);
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
   const [selectedGloss, setSelectedGloss] = useState<string | null>(null);
-  // **新增状态**: 用于追踪正在被微调的标注
   const [selectedAnnotationForEdit, setSelectedAnnotationForEdit] = useState<Annotation | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -90,7 +92,7 @@ function App() {
     if (task) {
       setSelectedTask(task);
       setSelectedGloss(null);
-      setSelectedAnnotationForEdit(null); // 切换任务时，取消微调状态
+      setSelectedAnnotationForEdit(null);
     }
   };
 
@@ -115,20 +117,16 @@ function App() {
     });
   }, [selectedTask]);
 
-  // **新增功能**: 处理标注更新的函数
   const handleUpdateAnnotation = async (annotationId: string, updates: Partial<Pick<Annotation, 'startTime' | 'endTime'>>) => {
-    // 乐观更新UI
     setAllAnnotations(prev => prev.map(anno =>
       anno.id === annotationId ? { ...anno, ...updates } : anno
     ));
 
-    // 将更新发送到服务器
     await fetch(`${API_URL}/api/annotations/${annotationId}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(updates),
     });
-    // 后续由 socket.io 的 'annotations_updated' 事件来保证最终数据一致性
   };
 
   const handleDeleteAnnotation = async (annotationId: string) => {
@@ -165,7 +163,6 @@ function App() {
         onAddAnnotation={handleAddAnnotation}
         onDeleteAnnotation={handleDeleteAnnotation}
         onImportAnnotations={handleImportAnnotations}
-        // **新增属性**: 将状态和处理函数传递下去
         selectedAnnotationForEdit={selectedAnnotationForEdit}
         onSelectAnnotationForEdit={setSelectedAnnotationForEdit}
         onUpdateAnnotation={handleUpdateAnnotation}
