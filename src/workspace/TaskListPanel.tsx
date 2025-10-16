@@ -23,24 +23,30 @@ export function TaskListPanel({
   selectedTask,
   onSelectTask,
 }: TaskListPanelProps) {
-  const [openCategories, setOpenCategories] = useState<string[]>([]);
+  const [openCategories, setOpenCategories] = useState<string[]>(() => {
+    // 初始化时，如果任务列表不为空，默认展开第一个
+    return tasks.length > 0 ? [tasks[0].categoryName] : [];
+  });
 
-  // 默认展开第一个分类，或者展开当前选中任务所在的分类
+  // **关键修改**: 调整 useEffect 逻辑
   useEffect(() => {
-    const newOpenCategories: string[] = [];
-    if (tasks.length > 0) {
-      // 默认展开第一个
-      newOpenCategories.push(tasks[0].categoryName);
-    }
     if (selectedTask) {
+      // 找到选中任务所属的大类
       const parentCategory = tasks.find(cat => cat.tasks.some(t => t.id === selectedTask.id));
-      if (parentCategory && !newOpenCategories.includes(parentCategory.categoryName)) {
-        // 如果选中任务的分类不在已展开列表中，也把它加进去
-        newOpenCategories.push(parentCategory.categoryName);
+      
+      if (parentCategory) {
+        // 使用函数式更新，以获取最新的 openCategories 状态
+        setOpenCategories(prevOpen => {
+          // 如果该大类尚未展开，则将其加入展开列表
+          if (!prevOpen.includes(parentCategory.categoryName)) {
+            return [...prevOpen, parentCategory.categoryName];
+          }
+          // 如果已经展开，则保持不变
+          return prevOpen;
+        });
       }
     }
-    setOpenCategories(newOpenCategories);
-  }, [tasks, selectedTask]); // 依赖 tasks 和 selectedTask
+  }, [selectedTask, tasks]); // 依赖 selectedTask 和 tasks
 
   const handleCategoryClick = (categoryName: string) => {
     setOpenCategories(prevOpen => {
