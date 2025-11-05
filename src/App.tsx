@@ -4,7 +4,7 @@ import { AppLayout } from './layout/AppLayout';
 import { ThemeProvider, createTheme, CssBaseline } from '@mui/material';
 import type { Annotation, Task, Category } from './data/types';
 
-const API_URL = 'https://sign-annotation-tool.onrender.com';
+const API_URL = import.meta.env.VITE_API_URL || 'https://sign-annotation-tool.onrender.com';
 
 const socket = io(API_URL);
 
@@ -21,7 +21,7 @@ function App() {
   const [editingAnnotations, setEditingAnnotations] = useState<Annotation[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [isSubmitting, setIsSubmitting] = useState(false); // 新增：用于在保存/删除时锁定UI
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const fetchAllData = useCallback(async () => {
     try {
@@ -40,13 +40,12 @@ function App() {
       setTaskCategories(tasksData);
       setAllAnnotations(annotationsData);
 
-      // 关键修复：确保在数据刷新后，selectedTask也得到更新
       setSelectedTask(prevSelectedTask => {
         if (!prevSelectedTask) return null;
         const updatedTask = tasksData
           .flatMap(cat => cat.tasks)
           .find(t => t.id === prevSelectedTask.id);
-        return updatedTask || prevSelectedTask; // 如果找不到，保持之前的状态
+        return updatedTask || prevSelectedTask;
       });
 
     } catch (e: any) {
@@ -117,7 +116,7 @@ function App() {
   };
 
   const handleSaveAnnotations = async (taskId: string, annotationsToSave: Annotation[]) => {
-    setIsSubmitting(true); // 开始提交，锁定UI
+    setIsSubmitting(true);
     try {
       await fetch(`${API_URL}/api/tasks/${taskId}/annotations`, {
         method: 'DELETE',
@@ -140,20 +139,21 @@ function App() {
         body: JSON.stringify({ status: '已完成' }),
       });
 
-      await fetchAllData(); // 主动刷新数据
+      // 后端会通过socket广播，所有客户端（包括自己）都会收到通知并调用fetchAllData
+      // await fetchAllData(); // 可以移除，依赖socket通知
       setEditingAnnotations([]);
     } catch (error) {
       console.error("保存标注时出错:", error);
       alert("保存失败，请检查网络连接或联系管理员。");
     } finally {
-      setIsSubmitting(false); // 结束提交，解锁UI
+      setIsSubmitting(false);
     }
   };
 
   const handleDeleteAnnotations = async (taskId: string, status: Task['status']) => {
     if (status === '待处理') return;
     
-    setIsSubmitting(true); // 开始删除，锁定UI
+    setIsSubmitting(true);
     try {
       if (status === '已完成') {
         await fetch(`${API_URL}/api/tasks/${taskId}/annotations`, {
@@ -167,13 +167,14 @@ function App() {
         body: JSON.stringify({ status: '待处理' }),
       });
 
-      await fetchAllData(); // 主动刷新数据
+      // 后端会通过socket广播，所有客户端（包括自己）都会收到通知并调用fetchAllData
+      // await fetchAllData(); // 可以移除，依赖socket通知
       setEditingAnnotations([]);
     } catch (error) {
       console.error("删除标注时出错:", error);
       alert("删除失败，请检查网络连接或联系管理员。");
     } finally {
-      setIsSubmitting(false); // 结束删除，解锁UI
+      setIsSubmitting(false);
     }
   };
 
@@ -181,7 +182,9 @@ function App() {
     // ... (此函数内容不变)
   };
 
-  const handleUpdateTaskStatus = (taskId: string, newStatus: Task['status']) => {
+  // **关键修改**
+  const handleUpdateTaskStatus = async (taskId: string, newStatus: Task['status']) => {
+    // 1. 立即更新本地UI，提供即时反馈
     setTaskCategories(prevCategories => {
       return prevCategories.map(category => ({
         ...category,
@@ -190,6 +193,18 @@ function App() {
         ),
       }));
     });
+
+    // 2. 将状态变更发送到后端，以便持久化和广播给其他用户
+    try {
+      await fetch(`${API_URL}/api/tasks/${taskId}/status`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: newStatus }),
+      });
+    } catch (error) {
+      console.error("更新任务状态时出错:", error);
+      // 如果失败，可以考虑回滚本地状态或提示用户
+    }
   };
 
   if (isLoading) return <div>正在加载...</div>;
@@ -210,7 +225,7 @@ function App() {
         onEditingAnnotationsChange={setEditingAnnotations}
         onGenerateDefaultAnnotations={handleGenerateDefaultAnnotations}
         onUpdateTaskStatus={handleUpdateTaskStatus}
-        isSubmitting={isSubmitting} // 传递新状态
+        isSubmitting={isSubmitting}
       />
     </ThemeProvider>
   );
