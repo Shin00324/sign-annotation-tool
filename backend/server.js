@@ -2,10 +2,11 @@ import express from 'express';
 import http from 'http';
 import { Server } from 'socket.io';
 import cors from 'cors';
-import fs from 'fs';
+import pg from 'pg';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import pg from 'pg';
+import fs from 'fs';
+import 'dotenv/config';
 
 const { Pool } = pg;
 
@@ -111,21 +112,17 @@ async function startServer() {
     try {
       await client.query('BEGIN');
       for (const anno of annotations) {
-        // **关键修复**: 将 start_time 和 end_time 改为 "startTime" 和 "endTime"
-        const queryText = `
-          INSERT INTO annotations(id, "taskId", gloss, "startTime", "endTime") 
-          VALUES($1, $2, $3, $4, $5)
-          ON CONFLICT (id) DO NOTHING;
-        `;
-        const values = [anno.id, anno.taskId, anno.gloss, anno.startTime, anno.endTime];
-        await client.query(queryText, values);
+        await client.query(
+          'INSERT INTO annotations (id, "taskId", gloss, "startTime", "endTime") VALUES ($1, $2, $3, $4, $5)',
+          [anno.id, anno.taskId, anno.gloss, anno.startTime, anno.endTime]
+        );
       }
       await client.query('COMMIT');
-      io.emit('annotations_updated');
+      io.emit('annotations_updated'); // 已有广播
       res.status(201).send('Import successful');
     } catch (err) {
       await client.query('ROLLBACK');
-      console.error('Error bulk importing annotations:', err);
+      console.error('Error importing annotations:', err);
       res.status(500).send('Server error');
     } finally {
       client.release();
@@ -136,9 +133,10 @@ async function startServer() {
     const { taskId } = req.params;
     try {
       await pool.query('DELETE FROM annotations WHERE "taskId" = $1', [taskId]);
+      io.emit('annotations_updated'); // **新增广播**
       res.status(204).send();
     } catch (err) {
-      console.error(`Error deleting annotations for task ${taskId}:`, err);
+      console.error('Error deleting annotations:', err);
       res.status(500).send('Server error');
     }
   });
@@ -147,15 +145,14 @@ async function startServer() {
     const { taskId } = req.params;
     const { status } = req.body;
     try {
-      const queryText = `
-        INSERT INTO task_status("taskId", status) 
-        VALUES($1, $2) 
-        ON CONFLICT ("taskId") DO UPDATE SET status = $2;
-      `;
-      await pool.query(queryText, [taskId, status]);
+      await pool.query(
+        'INSERT INTO task_status ("taskId", status) VALUES ($1, $2) ON CONFLICT ("taskId") DO UPDATE SET status = $2',
+        [taskId, status]
+      );
+      io.emit('annotations_updated'); // **新增广播**
       res.status(200).json({ taskId, status });
     } catch (err) {
-      console.error(`Error updating status for task ${taskId}:`, err);
+      console.error('Error updating task status:', err);
       res.status(500).send('Server error');
     }
   });

@@ -1,53 +1,41 @@
-import {
-  Box,
-  Paper,
-  Typography,
-  List,
-  ListItem,
-  ListItemText,
-  IconButton,
-  Tooltip,
-} from '@mui/material';
-import { Play } from 'lucide-react';
-import type { Annotation } from '../data/annotations';
+import { List, ListItem, ListItemText, Typography, Box, Paper, ListItemButton } from '@mui/material';
+import type { Annotation } from '../data/types';
 
 interface AnnotationListPanelProps {
   annotations: Annotation[];
   onPlaySegment: (startTime: number, endTime: number) => void;
 }
 
-const formatTime = (time: number) => {
-  if (isNaN(time) || time < 0) return '0.000';
-  return time.toFixed(3);
-};
-
 export const AnnotationListPanel = ({ annotations, onPlaySegment }: AnnotationListPanelProps) => {
   return (
-    <Paper elevation={2} sx={{ p: 2, height: '100%', display: 'flex', flexDirection: 'column' }}>
-      <Typography variant="h6" gutterBottom sx={{ flexShrink: 0 }}>
+    <Paper elevation={2} sx={{ p: 2, height: '100%', overflowY: 'auto' }}>
+      <Typography variant="h6" gutterBottom>
         标注结果
       </Typography>
-      <Box sx={{ flexGrow: 1, overflowY: 'auto' }}>
+      {annotations.length > 0 ? (
         <List dense>
-          {annotations.map((anno) => (
+          {annotations.map((anno, index) => (
             <ListItem
-              key={anno.id}
-              secondaryAction={
-                <Tooltip title="播放此片段">
-                  <IconButton edge="end" onClick={() => onPlaySegment(anno.startTime, anno.endTime)}>
-                    <Play size={18} />
-                  </IconButton>
-                </Tooltip>
-              }
+              key={anno.id || index}
+              disablePadding
+              divider
             >
-              <ListItemText
-                primary={anno.gloss}
-                secondary={`时间: ${formatTime(anno.startTime)}s - ${formatTime(anno.endTime)}s`}
-              />
+              <ListItemButton onClick={() => onPlaySegment(anno.startTime, anno.endTime)}>
+                <ListItemText
+                  primary={`${index + 1}. ${anno.gloss}`}
+                  secondary={`时间: ${anno.startTime.toFixed(2)}s - ${anno.endTime.toFixed(2)}s`}
+                />
+              </ListItemButton>
             </ListItem>
           ))}
         </List>
-      </Box>
+      ) : (
+        <Box sx={{ textAlign: 'center', mt: 4 }}>
+          <Typography color="text.secondary">
+            暂无标注数据
+          </Typography>
+        </Box>
+      )}
     </Paper>
   );
 };

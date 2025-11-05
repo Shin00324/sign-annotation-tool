@@ -1,16 +1,7 @@
-import React, { useState, useEffect } from 'react';
-import {
-  List,
-  ListItemButton,
-  ListItemText,
-  Collapse,
-  ListSubheader,
-  Box,
-  Typography,
-} from '@mui/material';
+import { useState } from 'react';
+import { List, ListItemButton, ListItemText, Collapse, Typography, Box } from '@mui/material';
 import { ExpandLess, ExpandMore } from '@mui/icons-material';
-import type { Category, Task } from '../App';
-import { StatusChip } from './StatusChip';
+import type { Category, Task } from '../data/types';
 
 interface TaskListPanelProps {
   tasks: Category[];
@@ -18,65 +9,46 @@ interface TaskListPanelProps {
   onSelectTask: (taskId: string) => void;
 }
 
-export function TaskListPanel({
-  tasks,
-  selectedTask,
-  onSelectTask,
-}: TaskListPanelProps) {
-  const [openCategories, setOpenCategories] = useState<string[]>(() => {
-    // 初始化时，如果任务列表不为空，默认展开第一个
-    return tasks.length > 0 ? [tasks[0].categoryName] : [];
-  });
+// 任务状态对应的颜色
+const statusColors: { [key: string]: string } = {
+  '待处理': '#f44336', // 红色
+  '部分完成': '#ff9800', // 橙色
+  '已完成': '#4caf50', // 绿色
+  '错误': '#f44336',
+  '未知': '#9e9e9e', // 灰色
+};
 
-  // **关键修改**: 调整 useEffect 逻辑
-  useEffect(() => {
-    if (selectedTask) {
-      // 找到选中任务所属的大类
-      const parentCategory = tasks.find(cat => cat.tasks.some(t => t.id === selectedTask.id));
-      
-      if (parentCategory) {
-        // 使用函数式更新，以获取最新的 openCategories 状态
-        setOpenCategories(prevOpen => {
-          // 如果该大类尚未展开，则将其加入展开列表
-          if (!prevOpen.includes(parentCategory.categoryName)) {
-            return [...prevOpen, parentCategory.categoryName];
-          }
-          // 如果已经展开，则保持不变
-          return prevOpen;
-        });
-      }
-    }
-  }, [selectedTask, tasks]); // 依赖 selectedTask 和 tasks
+export const TaskListPanel = ({ tasks, selectedTask, onSelectTask }: TaskListPanelProps) => {
+  const [openCategories, setOpenCategories] = useState<string[]>([]);
 
   const handleCategoryClick = (categoryName: string) => {
-    setOpenCategories(prevOpen => {
-      if (prevOpen.includes(categoryName)) {
-        return prevOpen.filter(name => name !== categoryName); // 如果已展开，则关闭
-      } else {
-        return [...prevOpen, categoryName]; // 如果未展开，则展开
-      }
-    });
+    setOpenCategories(prev =>
+      prev.includes(categoryName)
+        ? prev.filter(name => name !== categoryName)
+        : [...prev, categoryName]
+    );
   };
 
-  if (tasks.length === 0) {
-    return <Box sx={{ p: 2 }}><Typography>没有可用的任务。</Typography></Box>;
+  if (!tasks || tasks.length === 0) {
+    return (
+      <Box sx={{ p: 2, textAlign: 'center' }}>
+        <Typography>没有可用的数据</Typography>
+      </Box>
+    );
   }
 
   return (
-    <List
-      sx={{ width: '100%', bgcolor: 'background.paper' }}
-      component="nav"
-      subheader={<ListSubheader component="div">任务列表</ListSubheader>}
-    >
-      {tasks.map((category) => (
-        <React.Fragment key={category.categoryName}>
+    <List dense>
+      <ListItemText primary="任务列表" sx={{ px: 2, mb: 1 }} />
+      {tasks.map(category => (
+        <div key={category.categoryName}>
           <ListItemButton onClick={() => handleCategoryClick(category.categoryName)}>
             <ListItemText primary={category.categoryName} />
             {openCategories.includes(category.categoryName) ? <ExpandLess /> : <ExpandMore />}
           </ListItemButton>
           <Collapse in={openCategories.includes(category.categoryName)} timeout="auto" unmountOnExit>
-            <List component="div" disablePadding>
-              {category.tasks.map((task) => (
+            <List component="div" disablePadding dense>
+              {category.tasks.map(task => (
                 <ListItemButton
                   key={task.id}
                   selected={selectedTask?.id === task.id}
@@ -85,14 +57,28 @@ export function TaskListPanel({
                 >
                   <ListItemText
                     primary={task.video}
-                    secondary={<StatusChip status={task.status} />}
+                    secondary={
+                      <Box component="span" sx={{ display: 'flex', alignItems: 'center' }}>
+                        <Box
+                          component="span"
+                          sx={{
+                            width: 8,
+                            height: 8,
+                            borderRadius: '50%',
+                            backgroundColor: statusColors[task.status] || statusColors['未知'],
+                            mr: 1,
+                          }}
+                        />
+                        {task.status}
+                      </Box>
+                    }
                   />
                 </ListItemButton>
               ))}
             </List>
           </Collapse>
-        </React.Fragment>
+        </div>
       ))}
     </List>
   );
-}
+};

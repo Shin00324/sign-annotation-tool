@@ -1,5 +1,5 @@
 import { Box, Chip, List, ListItem, Paper, Typography } from "@mui/material";
-import type { Task } from "../App"; // 确保从 App.tsx 导入
+import type { Task } from "../data/types";
 
 interface GlossPanelProps {
   task: Task | null;
