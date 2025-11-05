@@ -2,9 +2,9 @@ import express from 'express';
 import http from 'http';
 import { Server } from 'socket.io';
 import cors from 'cors';
+import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import fs from 'fs';
 import pg from 'pg';
 
 const { Pool } = pg;
@@ -26,7 +26,13 @@ async function setupDatabase() {
         "endTime" REAL NOT NULL
       );
     `);
-    console.log('Database table "annotations" is ready.');
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS task_status (
+        "taskId" VARCHAR(255) PRIMARY KEY,
+        status VARCHAR(50) NOT NULL
+      );
+    `);
+    console.log('Database tables are ready.');
   } catch (err) {
     console.error('Error setting up database table:', err);
   } finally {
@@ -60,14 +66,8 @@ async function startServer() {
 
   app.use(cors(corsOptions));
   app.use(express.json());
-  
-  // **关键修改**: 移除了托管静态文件的代码
-  // app.use(express.static(path.join(__dirname, 'public')));
-  // app.use(express.static(path.join(__dirname, '..', 'dist')));
 
   io.on('connection', (socket) => console.log('A user connected:', socket.id));
-
-  // --- API Endpoints (使用 PostgreSQL) ---
 
   app.get('/api/tasks', async (req, res) => {
     try {
@@ -75,21 +75,15 @@ async function startServer() {
       const tasksFileContent = fs.readFileSync(tasksFilePath, 'utf-8');
       const taskCategories = JSON.parse(tasksFileContent);
       
-      const { rows: annotations } = await pool.query('SELECT * FROM annotations');
+      const { rows: statuses } = await pool.query('SELECT * FROM task_status');
+      const statusMap = new Map(statuses.map(s => [s.taskId, s.status]));
 
       const processedCategories = taskCategories.map(category => ({
         ...category,
-        tasks: category.tasks.map(task => {
-          const taskAnnotations = annotations.filter(a => a.taskId === task.id);
-          const annotatedGlosses = new Set(taskAnnotations.map(a => a.gloss));
-          let status = '待处理';
-          if (annotatedGlosses.size > 0 && annotatedGlosses.size < task.glosses.length) {
-            status = '部分完成';
-          } else if (annotatedGlosses.size >= task.glosses.length) {
-            status = '已完成';
-          }
-          return { ...task, status };
-        })
+        tasks: category.tasks.map(task => ({
+          ...task,
+          status: statusMap.get(task.id) || '待处理',
+        }))
       }));
       res.json(processedCategories);
     } catch (error) {
@@ -108,54 +102,63 @@ async function startServer() {
     }
   });
 
-  app.post('/api/annotations', async (req, res) => {
-    const { id, taskId, gloss, startTime, endTime } = req.body;
+  app.post('/api/annotations/import', async (req, res) => {
+    const annotations = req.body;
+    if (!Array.isArray(annotations) || annotations.length === 0) {
+      return res.status(400).send('Invalid input');
+    }
+    const client = await pool.connect();
     try {
-      const { rows } = await pool.query(
-        'INSERT INTO annotations (id, "taskId", gloss, "startTime", "endTime") VALUES ($1, $2, $3, $4, $5) RETURNING *',
-        [id, taskId, gloss, startTime, endTime]
-      );
+      await client.query('BEGIN');
+      for (const anno of annotations) {
+        // **关键修复**: 将 start_time 和 end_time 改为 "startTime" 和 "endTime"
+        const queryText = `
+          INSERT INTO annotations(id, "taskId", gloss, "startTime", "endTime") 
+          VALUES($1, $2, $3, $4, $5)
+          ON CONFLICT (id) DO NOTHING;
+        `;
+        const values = [anno.id, anno.taskId, anno.gloss, anno.startTime, anno.endTime];
+        await client.query(queryText, values);
+      }
+      await client.query('COMMIT');
       io.emit('annotations_updated');
-      res.status(201).json(rows[0]);
+      res.status(201).send('Import successful');
     } catch (err) {
-      console.error('Error creating annotation:', err);
+      await client.query('ROLLBACK');
+      console.error('Error bulk importing annotations:', err);
       res.status(500).send('Server error');
+    } finally {
+      client.release();
     }
   });
 
-  app.put('/api/annotations/:id', async (req, res) => {
-    const { id } = req.params;
-    const { startTime, endTime } = req.body;
+  app.delete('/api/tasks/:taskId/annotations', async (req, res) => {
+    const { taskId } = req.params;
     try {
-      const { rows } = await pool.query(
-        'UPDATE annotations SET "startTime" = $1, "endTime" = $2 WHERE id = $3 RETURNING *',
-        [startTime, endTime, id]
-      );
-      if (rows.length === 0) return res.status(404).json({ message: 'Annotation not found' });
-      io.emit('annotations_updated');
-      res.status(200).json(rows[0]);
-    } catch (err) {
-      console.error('Error updating annotation:', err);
-      res.status(500).send('Server error');
-    }
-  });
-
-  app.delete('/api/annotations/:id', async (req, res) => {
-    const { id } = req.params;
-    try {
-      await pool.query('DELETE FROM annotations WHERE id = $1', [id]);
-      io.emit('annotations_updated');
+      await pool.query('DELETE FROM annotations WHERE "taskId" = $1', [taskId]);
       res.status(204).send();
     } catch (err) {
-      console.error('Error deleting annotation:', err);
+      console.error(`Error deleting annotations for task ${taskId}:`, err);
       res.status(500).send('Server error');
     }
   });
 
-  // **关键修改**: 移除了捕获所有非API请求的路由
-  // app.get(/^\/(?!api).*/, (req, res) => {
-  //   res.sendFile(path.join(__dirname, '..', 'dist', 'index.html'));
-  // });
+  app.put('/api/tasks/:taskId/status', async (req, res) => {
+    const { taskId } = req.params;
+    const { status } = req.body;
+    try {
+      const queryText = `
+        INSERT INTO task_status("taskId", status) 
+        VALUES($1, $2) 
+        ON CONFLICT ("taskId") DO UPDATE SET status = $2;
+      `;
+      await pool.query(queryText, [taskId, status]);
+      res.status(200).json({ taskId, status });
+    } catch (err) {
+      console.error(`Error updating status for task ${taskId}:`, err);
+      res.status(500).send('Server error');
+    }
+  });
 
   httpServer.listen(PORT, () => console.log(`Server is running on http://localhost:${PORT}`));
 }

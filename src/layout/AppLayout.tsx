@@ -3,7 +3,7 @@ import { Header } from "./Header";
 import { Footer } from "./Footer";
 import { TaskListPanel } from "../workspace/TaskListPanel";
 import { VideoPanel } from "../workspace/VideoPanel";
-import { GlossPanel } from "../workspace/GlossPanel";
+import { AnnotationListPanel } from "../workspace/AnnotationListPanel";
 import type { Category, Task } from "../App";
 import type { Annotation } from "../data/annotations";
 
@@ -11,65 +11,64 @@ interface AppLayoutProps {
   taskCategories: Category[];
   selectedTask: Task | null;
   onTaskSelect: (taskId: string) => void;
-  selectedGloss: string | null;
-  onGlossSelect: (gloss: string) => void;
-  annotations: Annotation[];
   allAnnotations: Annotation[];
-  onAddAnnotation: (annotation: Omit<Annotation, "id" | "taskId">) => void;
-  onDeleteAnnotation: (annotationId: string) => void;
   onImportAnnotations: (annotations: Annotation[]) => void;
-  // **新增属性**: 定义微调功能相关的接口
-  selectedAnnotationForEdit: Annotation | null;
-  onSelectAnnotationForEdit: (annotation: Annotation | null) => void;
-  onUpdateAnnotation: (annotationId: string, updates: Partial<Pick<Annotation, 'startTime' | 'endTime'>>) => void;
+  onSaveAnnotations: (taskId: string, annotations: Annotation[]) => void;
+  // **新增/修改的 Props**
+  editingAnnotations: Annotation[];
+  onEditingAnnotationsChange: (annotations: Annotation[]) => void;
+  onGenerateDefaultAnnotations: (task: Task, duration: number) => void;
+  // **新增 Props**
+  onUpdateTaskStatus: (taskId: string, status: Task['status']) => void;
 }
 
-export const AppLayout = ({
-  taskCategories,
-  selectedTask,
-  onTaskSelect,
-  selectedGloss,
-  onGlossSelect,
-  annotations,
-  allAnnotations,
-  onAddAnnotation,
-  onDeleteAnnotation,
-  onImportAnnotations,
-  // **新增属性**: 接收这些新属性
-  selectedAnnotationForEdit,
-  onSelectAnnotationForEdit,
-  onUpdateAnnotation,
-}: AppLayoutProps) => {
+export const AppLayout = (props: AppLayoutProps) => {
+  // **关键修改**: 右侧列表的数据源现在是 editingAnnotations
+  // 如果 editingAnnotations 为空，则尝试从 allAnnotations 中查找已保存的数据
+  const annotationsForDisplay = 
+    props.editingAnnotations.length > 0 
+      ? props.editingAnnotations
+      : props.selectedTask 
+        ? props.allAnnotations.filter(a => a.taskId === props.selectedTask?.id)
+        : [];
+
+  const handlePlaySegment = (startTime: number, endTime: number) => {
+    // 这个功能暂时未实现，因为 VideoPanel 现在是独立的
+    console.log(`请求播放: ${startTime} - ${endTime}`);
+  };
+
   return (
     <Box sx={{ display: "flex", flexDirection: "column", height: "100vh" }}>
-      <Header allAnnotations={allAnnotations} onImportAnnotations={onImportAnnotations} />
+      <Header allAnnotations={props.allAnnotations} onImportAnnotations={props.onImportAnnotations} />
       <Box component="main" sx={{ display: 'flex', flexGrow: 1, p: 2, gap: 2, overflow: 'hidden' }}>
+        {/* 左侧栏: 任务列表 (不变) */}
         <Box sx={{ width: '20.83%', flexShrink: 0, border: '1px solid #444', borderRadius: 1, overflowY: 'auto' }}>
           <TaskListPanel
-            tasks={taskCategories}
-            selectedTask={selectedTask}
-            onSelectTask={onTaskSelect}
+            tasks={props.taskCategories}
+            selectedTask={props.selectedTask}
+            onSelectTask={props.onTaskSelect}
           />
         </Box>
 
-        <Box sx={{ flex: 1, minWidth: 0, display: 'flex' }}>
+        {/* 中间栏: 视频与标注条 */}
+        <Box sx={{ width: '58.34%', minWidth: 0, display: 'flex' }}>
           <VideoPanel
-            task={selectedTask}
-            annotations={annotations}
-            onAddAnnotation={onAddAnnotation}
-            onDeleteAnnotation={onDeleteAnnotation}
-            // **新增属性**: 将它们传递给 VideoPanel
-            selectedAnnotationForEdit={selectedAnnotationForEdit}
-            onSelectAnnotationForEdit={onSelectAnnotationForEdit}
-            onUpdateAnnotation={onUpdateAnnotation}
+            task={props.selectedTask}
+            onSaveAnnotations={props.onSaveAnnotations}
+            // **新增/修改的 Props**
+            annotations={props.editingAnnotations}
+            onAnnotationsChange={props.onEditingAnnotationsChange}
+            onGenerateDefaultAnnotations={props.onGenerateDefaultAnnotations}
+            // **新增 Props**
+            onUpdateTaskStatus={props.onUpdateTaskStatus}
           />
         </Box>
 
+        {/* 右侧栏: 标注结果列表 */}
         <Box sx={{ width: '20.83%', flexShrink: 0 }}>
-          <GlossPanel
-            task={selectedTask}
-            selectedGloss={selectedGloss}
-            onGlossSelect={onGlossSelect}
+          <AnnotationListPanel
+            annotations={annotationsForDisplay} // **使用新的数据源**
+            onPlaySegment={handlePlaySegment}
           />
         </Box>
       </Box>

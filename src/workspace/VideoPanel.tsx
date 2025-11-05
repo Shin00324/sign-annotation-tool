@@ -1,185 +1,79 @@
-import { useRef, useState, useEffect } from 'react';
-import {
-  Box,
-  Paper,
-  Typography,
-  Button,
-  List,
-  ListItem,
-  ListItemText,
-  IconButton,
-  Tooltip,
-  Divider,
-  ListItemButton,
-} from '@mui/material';
-import { Play, Trash2, AlertTriangle, Save, XCircle } from 'lucide-react';
+import { useRef, useState, useEffect, useCallback } from 'react';
+import { Box, Paper, Typography, Button } from '@mui/material';
+import { Save } from 'lucide-react';
 import type { Annotation } from '../data/annotations';
 import type { Task } from '../App';
+import { TimelineEditor } from './TimelineEditor';
 
-// --- 您需要修改这里 ---
-// 请将下面的 URL 替换为您自己的 Cloudflare R2 存储桶的公开访问 URL
-const R2_BASE_URL = "https://pub-1614b7bb5b3540b9898ae99f84787635.r2.dev/"; 
-// --------------------
-
-interface VideoPanelProps {
-  task: Task | null;
-  annotations: Annotation[];
-  onAddAnnotation: (annotation: Omit<Annotation, 'id' | 'taskId'>) => void;
-  onDeleteAnnotation: (annotationId: string) => void;
-  selectedAnnotationForEdit: Annotation | null;
-  onSelectAnnotationForEdit: (annotation: Annotation | null) => void;
-  onUpdateAnnotation: (annotationId: string, updates: Partial<Pick<Annotation, 'startTime' | 'endTime'>>) => void;
-}
-
-const formatTime = (time: number) => {
-  if (isNaN(time) || time < 0) return '0.000';
-  return time.toFixed(3);
-};
+const R2_BASE_URL = "https://pub-1614b7bb5b3540b9898ae99f84787635.r2.dev/";
 
 const getVideoUrl = (videoPath: string) => {
-  if (videoPath.startsWith('http')) {
-    return videoPath;
-  }
+  if (videoPath.startsWith('http')) return videoPath;
   return `${R2_BASE_URL.replace(/\/$/, '')}/${videoPath}`;
 };
 
+interface VideoPanelProps {
+  task: Task | null;
+  onSaveAnnotations: (taskId: string, annotations: Annotation[]) => void;
+  // **新增/修改的 Props**
+  annotations: Annotation[];
+  onAnnotationsChange: (annotations: Annotation[]) => void;
+  onGenerateDefaultAnnotations: (task: Task, duration: number) => void;
+  // **新增 Prop**
+  onUpdateTaskStatus: (taskId: string, status: Task['status']) => void;
+}
 
-const FineTunePanel = ({
-  annotation,
-  videoElement,
-  onUpdate,
-  onCancel,
-}: {
-  annotation: Annotation;
-  videoElement: HTMLVideoElement | null;
-  onUpdate: (id: string, updates: { startTime?: number; endTime?: number }) => void;
-  onCancel: () => void;
-}) => {
-  const [newStartTime, setNewStartTime] = useState(annotation.startTime);
-  const [newEndTime, setNewEndTime] = useState(annotation.endTime);
+export const VideoPanel = ({ 
+  task, 
+  onSaveAnnotations,
+  annotations,
+  onAnnotationsChange,
+  onGenerateDefaultAnnotations,
+  onUpdateTaskStatus // **新增 Prop**
+}: VideoPanelProps) => {
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const [isDirty, setIsDirty] = useState(false); // 跟踪用户是否拖动过
 
+  // 当任务切换时，重置 isDirty 状态
   useEffect(() => {
-    setNewStartTime(annotation.startTime);
-    setNewEndTime(annotation.endTime);
-  }, [annotation]);
+    setIsDirty(false);
+  }, [task]);
 
-  const handleSetStart = () => {
-    if (videoElement) setNewStartTime(videoElement.currentTime);
+  const handleVideoMetadataLoaded = () => {
+    if (videoRef.current && task) {
+      // 当视频元数据加载后，调用父组件的函数来生成默认标注
+      onGenerateDefaultAnnotations(task, videoRef.current.duration);
+    }
   };
 
-  const handleSetEnd = () => {
-    if (videoElement) setNewEndTime(videoElement.currentTime);
+  const handleSeek = useCallback((time: number) => {
+    if (videoRef.current) {
+      videoRef.current.currentTime = time;
+    }
+  }, []);
+
+  const handleAnnotationsChange = (newAnnotations: Annotation[]) => {
+    onAnnotationsChange(newAnnotations); // 调用父组件的函数更新状态
+    if (!isDirty && task) {
+      setIsDirty(true); // 用户第一次修改
+      // **关键新增**: 首次修改时，立即更新任务状态为 "部分完成"
+      onUpdateTaskStatus(task.id, '部分完成');
+    }
   };
 
   const handleSave = () => {
-    if (newStartTime >= newEndTime) {
-      alert('错误：开始时间必须小于结束时间。');
-      return;
-    }
-    onUpdate(annotation.id, { startTime: newStartTime, endTime: newEndTime });
-  };
-
-  return (
-    <Paper variant="outlined" sx={{ p: 2, mb: 2, borderColor: 'primary.main', borderWidth: 2 }}>
-      <Typography variant="h6" sx={{ mb: 2 }}>微调标注: "{annotation.gloss}"</Typography>
-      <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, flexWrap: 'wrap' }}>
-        <Button variant="outlined" onClick={handleSetStart}>设为开始时间</Button>
-        <Typography sx={{ minWidth: '80px' }}>{formatTime(newStartTime)}s</Typography>
-        <Divider orientation="vertical" flexItem />
-        <Button variant="outlined" onClick={handleSetEnd}>设为结束时间</Button>
-        <Typography sx={{ minWidth: '80px' }}>{formatTime(newEndTime)}s</Typography>
-        <Box sx={{ flexGrow: 1 }} />
-        <Button variant="contained" color="primary" startIcon={<Save />} onClick={handleSave}>保存更改</Button>
-        <IconButton onClick={onCancel}><XCircle /></IconButton>
-      </Box>
-    </Paper>
-  );
-};
-
-
-export const VideoPanel = ({
-  task,
-  annotations,
-  onAddAnnotation,
-  onDeleteAnnotation,
-  selectedAnnotationForEdit,
-  onSelectAnnotationForEdit,
-  onUpdateAnnotation,
-}: VideoPanelProps) => {
-  const videoRef = useRef<HTMLVideoElement>(null);
-  const [playingSegment, setPlayingSegment] = useState<{ endTime: number } | null>(null);
-  const [lastMarkTime, setLastMarkTime] = useState<number>(0);
-  const [nextGlossIndex, setNextGlossIndex] = useState<number>(0);
-
-  useEffect(() => {
     if (task) {
-      const sortedAnnotations = [...annotations].sort((a, b) => a.endTime - b.endTime);
-      const lastAnnotation = sortedAnnotations[sortedAnnotations.length - 1];
-      setNextGlossIndex(sortedAnnotations.length);
-      setLastMarkTime(lastAnnotation ? lastAnnotation.endTime : 0);
-    } else {
-      setNextGlossIndex(0);
-      setLastMarkTime(0);
-    }
-    if (videoRef.current) {
-      videoRef.current.load();
-    }
-  }, [task?.id]);
-
-  useEffect(() => {
-    const video = videoRef.current;
-    if (!video) return;
-    const handleTimeUpdate = () => {
-      if (playingSegment && video.currentTime >= playingSegment.endTime) {
-        video.pause();
-        setPlayingSegment(null);
-      }
-    };
-    video.addEventListener('timeupdate', handleTimeUpdate);
-    return () => {
-      video.removeEventListener('timeupdate', handleTimeUpdate);
-    };
-  }, [playingSegment]);
-
-  const handleMarkGlossEnd = () => {
-    const video = videoRef.current;
-    if (!video || !task || nextGlossIndex >= task.glosses.length) return;
-    const currentTime = video.currentTime;
-    if (currentTime <= lastMarkTime) {
-      alert("错误：结束时间必须大于上一个标记时间点。");
-      return;
-    }
-    const glossToAnnotate = task.glosses[nextGlossIndex];
-    onAddAnnotation({
-      gloss: glossToAnnotate,
-      startTime: lastMarkTime,
-      endTime: currentTime,
-    });
-    setLastMarkTime(currentTime);
-    setNextGlossIndex(prevIndex => prevIndex + 1);
-  };
-
-  const handlePlaySegment = (startTime: number, endTime: number) => {
-    const video = videoRef.current;
-    if (video) {
-      setPlayingSegment({ endTime });
-      video.currentTime = startTime;
-      video.play();
+      onSaveAnnotations(task.id, annotations);
+      alert('标注已完成并保存！');
+      setIsDirty(false); // 保存后重置 dirty 状态
     }
   };
-
-  const handleSaveFineTune = (id: string, updates: { startTime?: number; endTime?: number }) => {
-    onUpdateAnnotation(id, updates);
-    onSelectAnnotationForEdit(null);
-  };
-
-  const isAllGlossesMarked = task ? nextGlossIndex >= task.glosses.length : true;
-  const nextGlossToMark = task && !isAllGlossesMarked ? task.glosses[nextGlossIndex] : null;
-  const sortedAnnotations = [...annotations].sort((a, b) => a.endTime - b.endTime);
 
   return (
     <Paper elevation={2} sx={{ p: 2, width: '100%', display: "flex", flexDirection: "column" }}>
-      <Typography variant="h6" gutterBottom sx={{ flexShrink: 0 }}>视频与标注</Typography>
+      <Typography variant="h6" gutterBottom sx={{ flexShrink: 0 }}>
+        视频标注工作区
+      </Typography>
       {task ? (
         <Box sx={{ display: 'flex', flexDirection: 'column', flexGrow: 1, minHeight: 0 }}>
           <Box sx={{ backgroundColor: '#000', mb: 2, flexShrink: 0 }}>
@@ -187,73 +81,30 @@ export const VideoPanel = ({
               ref={videoRef}
               controls
               width="100%"
-              style={{ display: 'block', maxHeight: '40vh' }}
+              style={{ display: 'block', maxHeight: '60vh' }}
               key={task.id}
               src={getVideoUrl(task.video)}
+              onLoadedMetadata={handleVideoMetadataLoaded}
             />
           </Box>
-          
-          {selectedAnnotationForEdit ? (
-            <FineTunePanel
-              annotation={selectedAnnotationForEdit}
-              videoElement={videoRef.current}
-              onUpdate={handleSaveFineTune}
-              onCancel={() => onSelectAnnotationForEdit(null)}
-            />
-          ) : (
-            <Paper variant="outlined" sx={{ p: 2, mb: 2, flexShrink: 0 }}>
-              <Typography variant="h6" sx={{ mb: 2 }}>顺序标注控制</Typography>
-              <Box sx={{ display: 'flex', alignItems: 'center', gap: 3 }}>
-                <Button
-                  variant="contained"
-                  color="primary"
-                  onClick={handleMarkGlossEnd}
-                  disabled={isAllGlossesMarked}
-                  size="large"
-                >
-                  {isAllGlossesMarked ? '全部词目已标注' : `标记词尾: ${nextGlossToMark}`}
-                </Button>
-                <Box>
-                  <Typography variant="body2" color="text.secondary">上个标记时间点</Typography>
-                  <Typography variant="h5" component="div">{formatTime(lastMarkTime)}s</Typography>
-                </Box>
-              </Box>
-            </Paper>
-          )}
 
-          <Typography variant="subtitle1" sx={{ mt: 2, mb: 1, flexShrink: 0 }}>
-            已有标注 ({sortedAnnotations.length} / {task.glosses.length})
-          </Typography>
-          
-          <Box sx={{ flexGrow: 1, overflowY: 'auto' }}>
-            <List dense>
-              {sortedAnnotations.map((anno) => (
-                <ListItemButton
-                  key={anno.id}
-                  selected={selectedAnnotationForEdit?.id === anno.id}
-                  onClick={() => onSelectAnnotationForEdit(anno)}
-                >
-                  <Tooltip title="播放此片段" placement="top-start">
-                    <IconButton edge="start" sx={{ mr: 1 }} onClick={(e) => { e.stopPropagation(); handlePlaySegment(anno.startTime, anno.endTime); }}>
-                      <Play size={18} />
-                    </IconButton>
-                  </Tooltip>
-                  <ListItemText
-                    primary={anno.gloss}
-                    secondary={`时间: ${formatTime(anno.startTime)}s - ${formatTime(anno.endTime)}s`}
-                  />
-                  <IconButton edge="end" aria-label="delete" onClick={(e) => { e.stopPropagation(); onDeleteAnnotation(anno.id); }}>
-                    <Trash2 size={18} />
-                  </IconButton>
-                </ListItemButton>
-              ))}
-              {sortedAnnotations.length === 0 && (
-                <ListItem>
-                  <AlertTriangle size={18} style={{ marginRight: '8px' }} />
-                  <ListItemText secondary="暂无标注。请使用上方的“顺序标注控制”面板开始。" />
-                </ListItem>
-              )}
-            </List>
+          <TimelineEditor
+            duration={videoRef.current?.duration || 0}
+            annotations={annotations} // **使用从 props 传入的 annotations**
+            onAnnotationsChange={handleAnnotationsChange}
+            onSeek={handleSeek}
+          />
+
+          <Box sx={{ mt: 'auto', pt: 2, display: 'flex', justifyContent: 'flex-end' }}>
+            <Button
+              variant="contained"
+              color="primary"
+              startIcon={<Save />}
+              onClick={handleSave}
+              disabled={!isDirty} // 如果从未修改过，则禁用按钮
+            >
+              标注完成
+            </Button>
           </Box>
         </Box>
       ) : (

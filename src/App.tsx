@@ -1,13 +1,11 @@
-import  { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback } from 'react';
+import { ThemeProvider, createTheme, CssBaseline } from '@mui/material';
 import { io } from 'socket.io-client';
 import { AppLayout } from './layout/AppLayout';
 import type { Annotation } from './data/annotations';
-import { ThemeProvider, createTheme, CssBaseline } from '@mui/material';
 
-// **关键修改**: 使用环境变量来动态设置 API URL
-// 在本地开发时，Vite 会使用 'http://localhost:3001'
-// 在 Render 上，我们会设置一个环境变量指向部署的后端地址
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
+const API_URL = 'https://sign-annotation-tool.onrender.com'; // 指向云端后端进行开发
+
 const socket = io(API_URL);
 
 export interface Task {
@@ -32,21 +30,25 @@ function App() {
   const [taskCategories, setTaskCategories] = useState<Category[]>([]);
   const [allAnnotations, setAllAnnotations] = useState<Annotation[]>([]);
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
-  const [selectedGloss, setSelectedGloss] = useState<string | null>(null);
-  const [selectedAnnotationForEdit, setSelectedAnnotationForEdit] = useState<Annotation | null>(null);
+  const [editingAnnotations, setEditingAnnotations] = useState<Annotation[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const fetchAllData = useCallback(async () => {
-    setError(null);
+  // **关键修复**: 移除 fetchAllData 对 selectedTask 的依赖，打破循环
+  const fetchAllData = useCallback(async (currentTaskId: string | null) => {
     try {
+      // 仅在初次加载时显示全局 loading
+      if (!currentTaskId) {
+        setIsLoading(true);
+      }
+
       const [tasksResponse, annotationsResponse] = await Promise.all([
         fetch(`${API_URL}/api/tasks`),
         fetch(`${API_URL}/api/annotations`),
       ]);
 
       if (!tasksResponse.ok || !annotationsResponse.ok) {
-        throw new Error('从服务器获取数据失败。');
+        throw new Error('网络响应错误');
       }
 
       const tasksData: Category[] = await tasksResponse.json();
@@ -54,84 +56,137 @@ function App() {
 
       setTaskCategories(tasksData);
       setAllAnnotations(annotationsData);
-
-      setSelectedTask(prevSelectedTask => {
-        if (!prevSelectedTask) return null;
-        const updatedTask = tasksData
-          .flatMap(cat => cat.tasks)
-          .find(t => t.id === prevSelectedTask.id);
-        return updatedTask || null;
-      });
+      
+      // 如果有已选中的任务，刷新它的信息
+      if (currentTaskId) {
+        const refreshedTask = tasksData.flatMap(c => c.tasks).find(t => t.id === currentTaskId);
+        setSelectedTask(refreshedTask || null);
+      }
 
     } catch (e: any) {
       setError(e.message);
-      console.error("获取数据时出错:", e);
+      console.error("获取数据失败:", e);
     } finally {
-      setIsLoading(false);
+      // 仅在初次加载时关闭全局 loading
+      if (!currentTaskId) {
+        setIsLoading(false);
+      }
     }
-  }, []);
+  }, []); // **关键修复**: 移除依赖数组中的 selectedTask
 
   useEffect(() => {
-    setIsLoading(true);
-    fetchAllData();
+    // 传入 null 表示是初次加载
+    fetchAllData(null);
+
+    const handleAnnotationsUpdated = () => {
+      console.log('接收到 annotations_updated 事件，重新获取数据...');
+      // 传入当前任务ID，避免全局loading
+      fetchAllData(selectedTask?.id ?? null);
+    };
 
     socket.on('connect', () => console.log('已连接到 WebSocket 服务器'));
-    socket.on('annotations_updated', () => {
-      console.log('收到标注更新事件，正在后台重新获取数据...');
-      fetchAllData();
-    });
+    socket.on('annotations_updated', handleAnnotationsUpdated);
 
     return () => {
       socket.off('connect');
-      socket.off('annotations_updated');
+      socket.off('annotations_updated', handleAnnotationsUpdated);
     };
-  }, [fetchAllData]);
+  }, [fetchAllData, selectedTask?.id]); // **关键修复**: 依赖 selectedTask.id 而不是整个对象
 
   const handleSelectTask = (taskId: string) => {
     const task = taskCategories.flatMap(cat => cat.tasks).find(t => t.id === taskId);
-    if (task) {
-      setSelectedTask(task);
-      setSelectedGloss(null);
-      setSelectedAnnotationForEdit(null);
+    if (!task) return;
+
+    setSelectedTask(task);
+
+    if (task.status === '已完成') {
+      const savedAnnotations = allAnnotations.filter(anno => anno.taskId === taskId);
+      const sortedAnnotations = savedAnnotations.sort((a, b) => 
+        task.glosses.indexOf(a.gloss) - task.glosses.indexOf(b.gloss)
+      );
+      setEditingAnnotations(sortedAnnotations);
+    } else {
+      setEditingAnnotations([]);
     }
   };
 
-  const handleAddAnnotation = useCallback((annotation: Omit<Annotation, 'id' | 'taskId'>) => {
-    if (!selectedTask) return;
+  const handleGenerateDefaultAnnotations = (task: Task, videoDuration: number) => {
+    if (task.status === '已完成') {
+      return;
+    }
 
-    const newAnnotation = {
-      ...annotation,
-      taskId: selectedTask.id,
-      id: `anno_${Date.now()}`
-    };
+    const glossCount = task.glosses.length;
+    if (glossCount === 0) {
+      setEditingAnnotations([]);
+      return;
+    }
     
-    setAllAnnotations(currentAnnotations => [...currentAnnotations, newAnnotation]);
+    const segmentDuration = videoDuration / glossCount;
+    const defaultAnnotations: Annotation[] = task.glosses.map((gloss, index) => ({
+      id: `temp_${task.id}_${index}`,
+      taskId: task.id,
+      gloss: gloss,
+      startTime: index * segmentDuration,
+      endTime: (index + 1) * segmentDuration,
+    }));
+    
+    if (defaultAnnotations.length > 0) {
+      defaultAnnotations[defaultAnnotations.length - 1].endTime = videoDuration;
+    }
 
-    fetch(`${API_URL}/api/annotations`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(newAnnotation),
-    }).catch(error => {
-      console.error("添加标注失败:", error);
-      setAllAnnotations(currentAnnotations => currentAnnotations.filter(a => a.id !== newAnnotation.id));
-    });
-  }, [selectedTask]);
-
-  const handleUpdateAnnotation = async (annotationId: string, updates: Partial<Pick<Annotation, 'startTime' | 'endTime'>>) => {
-    setAllAnnotations(prev => prev.map(anno =>
-      anno.id === annotationId ? { ...anno, ...updates } : anno
-    ));
-
-    await fetch(`${API_URL}/api/annotations/${annotationId}`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(updates),
-    });
+    setEditingAnnotations(defaultAnnotations);
   };
 
-  const handleDeleteAnnotation = async (annotationId: string) => {
-    setAllAnnotations(prev => prev.filter(a => a.id !== annotationId));
-    await fetch(`${API_URL}/api/annotations/${annotationId}`, { method: 'DELETE' });
+  const handleSaveAnnotations = async (taskId: string, annotationsToSave: Annotation[]) => {
+    try {
+      await fetch(`${API_URL}/api/tasks/${taskId}/annotations`, {
+        method: 'DELETE',
+      });
+
+      const newAnnotationsWithRealIds = annotationsToSave.map(anno => ({
+        ...anno,
+        id: `anno_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
+      }));
+
+      await fetch(`${API_URL}/api/annotations/import`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(newAnnotationsWithRealIds),
+      });
+      
+      await handleUpdateTaskStatus(taskId, '已完成');
+
+      setAllAnnotations(prev => {
+        const otherAnnotations = prev.filter(a => a.taskId !== taskId);
+        return [...otherAnnotations, ...newAnnotationsWithRealIds];
+      });
+
+    } catch (error) {
+      console.error("保存标注失败:", error);
+      alert("保存失败，请检查网络连接或联系管理员。");
+    }
+  };
+
+  const handleUpdateTaskStatus = async (taskId: string, status: Task['status']) => {
+    setTaskCategories(prev =>
+      prev.map(cat => ({
+        ...cat,
+        tasks: cat.tasks.map(t =>
+          t.id === taskId ? { ...t, status: status } : t
+        ),
+      }))
+    );
+
+    try {
+      await fetch(`${API_URL}/api/tasks/${taskId}/status`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: status }),
+      });
+    } catch (error) {
+      console.error(`Failed to update status for task ${taskId}:`, error);
+      fetchAllData(taskId); 
+    }
   };
 
   const handleImportAnnotations = async (importedAnnotations: Annotation[]) => {
@@ -142,12 +197,8 @@ function App() {
     });
   };
 
-  const annotationsForSelectedTask = selectedTask
-    ? allAnnotations.filter(a => a.taskId === selectedTask.id)
-    : [];
-
-  if (isLoading) return <div>正在加载...</div>;
-  if (error) return <div>错误: {error}</div>;
+  if (isLoading) return <ThemeProvider theme={darkTheme}><CssBaseline /><div style={{ padding: '20px' }}>正在加载数据...</div></ThemeProvider>;
+  if (error) return <ThemeProvider theme={darkTheme}><CssBaseline /><div style={{ padding: '20px', color: 'red' }}>错误: {error}</div></ThemeProvider>;
 
   return (
     <ThemeProvider theme={darkTheme}>
@@ -156,16 +207,13 @@ function App() {
         taskCategories={taskCategories}
         selectedTask={selectedTask}
         onTaskSelect={handleSelectTask}
-        selectedGloss={selectedGloss}
-        onGlossSelect={setSelectedGloss}
-        annotations={annotationsForSelectedTask}
         allAnnotations={allAnnotations}
-        onAddAnnotation={handleAddAnnotation}
-        onDeleteAnnotation={handleDeleteAnnotation}
         onImportAnnotations={handleImportAnnotations}
-        selectedAnnotationForEdit={selectedAnnotationForEdit}
-        onSelectAnnotationForEdit={setSelectedAnnotationForEdit}
-        onUpdateAnnotation={handleUpdateAnnotation}
+        onSaveAnnotations={handleSaveAnnotations}
+        editingAnnotations={editingAnnotations}
+        onEditingAnnotationsChange={setEditingAnnotations}
+        onGenerateDefaultAnnotations={handleGenerateDefaultAnnotations}
+        onUpdateTaskStatus={handleUpdateTaskStatus}
       />
     </ThemeProvider>
   );
