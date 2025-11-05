@@ -139,8 +139,6 @@ function App() {
         body: JSON.stringify({ status: '已完成' }),
       });
 
-      // 后端会通过socket广播，所有客户端（包括自己）都会收到通知并调用fetchAllData
-      // await fetchAllData(); // 可以移除，依赖socket通知
       setEditingAnnotations([]);
     } catch (error) {
       console.error("保存标注时出错:", error);
@@ -167,8 +165,6 @@ function App() {
         body: JSON.stringify({ status: '待处理' }),
       });
 
-      // 后端会通过socket广播，所有客户端（包括自己）都会收到通知并调用fetchAllData
-      // await fetchAllData(); // 可以移除，依赖socket通知
       setEditingAnnotations([]);
     } catch (error) {
       console.error("删除标注时出错:", error);
@@ -178,13 +174,15 @@ function App() {
     }
   };
 
-  const handleImportAnnotations = async (importedAnnotations: Annotation[]) => {
-    // ... (此函数内容不变)
-  };
+  // const handleImportAnnotations = async (importedAnnotations: Annotation[]) => {
+  //   await fetch(`${API_URL}/api/annotations/import`, {
+  //     method: 'POST',
+  //     headers: { 'Content-Type': 'application/json' },
+  //     body: JSON.stringify(importedAnnotations),
+  //   });
+  // };
 
-  // **关键修改**
   const handleUpdateTaskStatus = async (taskId: string, newStatus: Task['status']) => {
-    // 1. 立即更新本地UI，提供即时反馈
     setTaskCategories(prevCategories => {
       return prevCategories.map(category => ({
         ...category,
@@ -194,7 +192,6 @@ function App() {
       }));
     });
 
-    // 2. 将状态变更发送到后端，以便持久化和广播给其他用户
     try {
       await fetch(`${API_URL}/api/tasks/${taskId}/status`, {
         method: 'PUT',
@@ -203,7 +200,6 @@ function App() {
       });
     } catch (error) {
       console.error("更新任务状态时出错:", error);
-      // 如果失败，可以考虑回滚本地状态或提示用户
     }
   };
 
@@ -218,7 +214,7 @@ function App() {
         selectedTask={selectedTask}
         onTaskSelect={handleSelectTask}
         allAnnotations={allAnnotations}
-        onImportAnnotations={handleImportAnnotations}
+        // onImportAnnotations={handleImportAnnotations} // 注释掉
         onSaveAnnotations={handleSaveAnnotations}
         onDeleteAnnotations={handleDeleteAnnotations}
         editingAnnotations={editingAnnotations}

@@ -12,14 +12,14 @@ interface AppLayoutProps {
   selectedTask: Task | null;
   onTaskSelect: (taskId: string) => void;
   allAnnotations: Annotation[];
-  onImportAnnotations: (annotations: Annotation[]) => void;
+  // onImportAnnotations: (annotations: Annotation[]) => void; // 注释掉
   onSaveAnnotations: (taskId: string, annotations: Annotation[]) => void;
   onDeleteAnnotations: (taskId: string, status: Task['status']) => void;
   editingAnnotations: Annotation[];
   onEditingAnnotationsChange: React.Dispatch<React.SetStateAction<Annotation[]>>;
   onGenerateDefaultAnnotations: (task: Task, duration: number) => void;
   onUpdateTaskStatus: (taskId: string, newStatus: Task['status']) => void;
-  isSubmitting: boolean; // 新增
+  isSubmitting: boolean;
 }
 
 export const AppLayout = (props: AppLayoutProps) => {
@@ -36,7 +36,6 @@ export const AppLayout = (props: AppLayoutProps) => {
 
   return (
     <Box sx={{ display: "flex", flexDirection: "column", height: "100vh", position: 'relative' }}>
-      {/* 全局遮罩层 */}
       {props.isSubmitting && (
         <Box sx={{
           position: 'absolute',
@@ -54,7 +53,7 @@ export const AppLayout = (props: AppLayoutProps) => {
           <CircularProgress color="inherit" />
         </Box>
       )}
-      <Header allAnnotations={props.allAnnotations} onImportAnnotations={props.onImportAnnotations} />
+      <Header allAnnotations={props.allAnnotations} /* onImportAnnotations={props.onImportAnnotations} */ />
       <Box component="main" sx={{ display: 'flex', flexGrow: 1, p: 2, gap: 2, overflow: 'hidden' }}>
         <Box sx={{ width: '20.83%', flexShrink: 0, border: '1px solid #444', borderRadius: 1, overflowY: 'auto' }}>
           <TaskListPanel
@@ -73,7 +72,7 @@ export const AppLayout = (props: AppLayoutProps) => {
             onAnnotationsChange={props.onEditingAnnotationsChange}
             onGenerateDefaultAnnotations={props.onGenerateDefaultAnnotations}
             onUpdateTaskStatus={props.onUpdateTaskStatus}
-            isSubmitting={props.isSubmitting} // 传递
+            isSubmitting={props.isSubmitting}
           />
         </Box>
 
