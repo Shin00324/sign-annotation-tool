@@ -10,6 +10,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import fs from 'fs/promises';
 import jwt from 'jsonwebtoken';
+import fetch from 'node-fetch';
 import { S3Client, GetObjectCommand } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 
@@ -33,6 +34,7 @@ const s3 = new S3Client({
     accessKeyId: R2_ACCESS_KEY_ID,
     secretAccessKey: R2_SECRET_ACCESS_KEY,
   },
+  systemClockOffset: 0, 
 });
 // --- 结束安全配置 ---
 
@@ -161,6 +163,20 @@ async function startServer() {
   app.get('/api/signed-video-url/:taskId', authenticateToken, async (req, res) => {
     const { taskId } = req.params;
     try {
+
+      // --- 新增时间校准逻辑 ---
+      try {
+        const response = await fetch('http://worldtimeapi.org/api/timezone/Etc/UTC');
+        const data = await response.json();
+        const trueUtcTime = new Date(data.utc_datetime).getTime();
+        const serverTime = new Date().getTime();
+        s3.config.systemClockOffset = trueUtcTime - serverTime;
+      } catch (timeError) {
+        console.error("Warning: Failed to fetch true UTC time. Relying on server clock.", timeError);
+        s3.config.systemClockOffset = 0; // 如果获取失败，则退回原样
+      }
+      // --- 结束时间校准逻辑 ---
+
       const tasksData = await fs.readFile(path.join(__dirname, 'tasks.json'), 'utf-8');
       const categories = JSON.parse(tasksData);
       const task = categories.flatMap(c => c.tasks).find(t => t.id === taskId);
