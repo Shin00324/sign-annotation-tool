@@ -1,7 +1,9 @@
-import { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import { ThemeProvider, createTheme, CssBaseline, Box, CircularProgress, Typography } from '@mui/material';
 import { io } from 'socket.io-client';
 import { AppLayout } from './layout/AppLayout';
-import { ThemeProvider, createTheme, CssBaseline } from '@mui/material';
+import { Login } from './auth/Login'; // 新增
+import apiClient from './api'; // 新增
 import type { Annotation, Task, Category } from './data/types';
 
 const API_URL = import.meta.env.VITE_API_URL || 'https://sign-annotation-tool.onrender.com';
@@ -15,6 +17,7 @@ const darkTheme = createTheme({
 });
 
 function App() {
+  const [isAuthenticated, setIsAuthenticated] = useState(!!localStorage.getItem('authToken')); // 新增
   const [taskCategories, setTaskCategories] = useState<Category[]>([]);
   const [allAnnotations, setAllAnnotations] = useState<Annotation[]>([]);
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
@@ -24,64 +27,57 @@ function App() {
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const fetchAllData = useCallback(async () => {
+    // 只有在认证通过后才执行
+    if (!isAuthenticated) return;
     try {
       const [tasksResponse, annotationsResponse] = await Promise.all([
-        fetch(`${API_URL}/api/tasks`),
-        fetch(`${API_URL}/api/annotations`),
+        apiClient.get('/api/tasks'),
+        apiClient.get('/api/annotations'),
       ]);
 
-      if (!tasksResponse.ok || !annotationsResponse.ok) {
-        throw new Error('从服务器获取数据失败。');
-      }
+      const categories: Category[] = tasksResponse.data;
+      const annotations: Annotation[] = annotationsResponse.data;
 
-      const tasksData: Category[] = await tasksResponse.json();
-      const annotationsData: Annotation[] = await annotationsResponse.json();
-
-      setTaskCategories(tasksData);
-      setAllAnnotations(annotationsData);
-
-      setSelectedTask(prevSelectedTask => {
-        if (!prevSelectedTask) return null;
-        const updatedTask = tasksData
-          .flatMap(cat => cat.tasks)
-          .find(t => t.id === prevSelectedTask.id);
-        return updatedTask || prevSelectedTask;
-      });
-
+      setTaskCategories(categories);
+      setAllAnnotations(annotations);
+      setError(null);
     } catch (e: any) {
       setError(e.message);
       console.error("获取数据时出错:", e);
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [isAuthenticated]); // 依赖 isAuthenticated
 
   useEffect(() => {
-    setIsLoading(true);
-    fetchAllData();
-
-    socket.on('connect', () => console.log('已连接到 WebSocket 服务器'));
-    socket.on('annotations_updated', () => {
-      console.log('收到标注更新事件，正在后台重新获取数据...');
+    // 认证状态变化时触发数据获取
+    if (isAuthenticated) {
+      setIsLoading(true);
       fetchAllData();
-    });
 
-    return () => {
-      socket.off('connect');
-      socket.off('annotations_updated');
-    };
-  }, [fetchAllData]);
+      socket.on('connect', () => console.log('已连接到 WebSocket 服务器'));
+      socket.on('annotations_updated', () => {
+        console.log('收到标注更新通知，重新获取数据...');
+        fetchAllData();
+      });
+
+      return () => {
+        socket.off('connect');
+        socket.off('annotations_updated');
+      };
+    }
+  }, [fetchAllData, isAuthenticated]);
+
+  const handleLoginSuccess = () => {
+    setIsAuthenticated(true);
+  };
 
   const handleSelectTask = (taskId: string) => {
     const task = taskCategories.flatMap(cat => cat.tasks).find(t => t.id === taskId);
     if (task) {
       setSelectedTask(task);
-      if (task.status === '已完成') {
-        const savedAnnotations = allAnnotations.filter(a => a.taskId === taskId);
-        setEditingAnnotations(savedAnnotations);
-      } else {
-        setEditingAnnotations([]);
-      }
+      const taskAnnotations = allAnnotations.filter(a => a.taskId === taskId);
+      setEditingAnnotations(taskAnnotations);
     } else {
       setSelectedTask(null);
       setEditingAnnotations([]);
@@ -90,7 +86,7 @@ function App() {
 
   const handleGenerateDefaultAnnotations = (task: Task, videoDuration: number) => {
     if (task.status === '已完成' && editingAnnotations.length > 0) {
-      return;
+      return; // 如果任务已完成且已有标注，则不生成默认值
     }
 
     const glossCount = task.glosses.length;
@@ -118,57 +114,50 @@ function App() {
   const handleSaveAnnotations = async (taskId: string, annotationsToSave: Annotation[]) => {
     setIsSubmitting(true);
     try {
-      await fetch(`${API_URL}/api/tasks/${taskId}/annotations`, {
-        method: 'DELETE',
-      });
-
-      const newAnnotationsWithRealIds = annotationsToSave.map(anno => ({
-        ...anno,
-        id: `anno_${Date.now()}_${Math.random()}`
-      }));
-
-      await fetch(`${API_URL}/api/annotations/import`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(newAnnotationsWithRealIds),
-      });
+      // 1. 先删除旧的标注
+      await apiClient.delete(`/api/tasks/${taskId}/annotations`);
       
-      await fetch(`${API_URL}/api/tasks/${taskId}/status`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ status: '已完成' }),
-      });
+      // 2. 导入新的标注
+      await apiClient.post('/api/annotations/import', annotationsToSave);
 
-      setEditingAnnotations([]);
+      // 3. 更新任务状态
+      await handleUpdateTaskStatus(taskId, '已完成');
+      
+      // 4. 重新获取所有数据以确保UI同步
+      await fetchAllData();
+
     } catch (error) {
-      console.error("保存标注时出错:", error);
-      alert("保存失败，请检查网络连接或联系管理员。");
+      console.error('保存标注失败:', error);
+      setError('保存标注失败，请稍后重试。');
     } finally {
       setIsSubmitting(false);
     }
   };
 
   const handleDeleteAnnotations = async (taskId: string, status: Task['status']) => {
-    if (status === '待处理') return;
-    
     setIsSubmitting(true);
     try {
       if (status === '已完成') {
-        await fetch(`${API_URL}/api/tasks/${taskId}/annotations`, {
-          method: 'DELETE',
-        });
+        await apiClient.delete(`/api/tasks/${taskId}/annotations`);
       }
+      // 统一将状态更新为“待处理”
+      await handleUpdateTaskStatus(taskId, '待处理');
+      
+      // 重新获取所有数据
+      await fetchAllData();
 
-      await fetch(`${API_URL}/api/tasks/${taskId}/status`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ status: '待处理' }),
-      });
-
-      setEditingAnnotations([]);
+      // 如果删除的是当前选中的任务，则清空编辑区
+      if (selectedTask?.id === taskId) {
+        const task = taskCategories.flatMap(cat => cat.tasks).find(t => t.id === taskId);
+        if (task && videoRef.current) { // videoRef 需要从 VideoPanel 传递上来
+           handleGenerateDefaultAnnotations(task, videoRef.current.duration);
+        } else {
+           setEditingAnnotations([]);
+        }
+      }
     } catch (error) {
-      console.error("删除标注时出错:", error);
-      alert("删除失败，请检查网络连接或联系管理员。");
+      console.error('删除或重置标注失败:', error);
+      setError('操作失败，请稍后重试。');
     } finally {
       setIsSubmitting(false);
     }
@@ -183,28 +172,54 @@ function App() {
   // };
 
   const handleUpdateTaskStatus = async (taskId: string, newStatus: Task['status']) => {
-    setTaskCategories(prevCategories => {
-      return prevCategories.map(category => ({
-        ...category,
-        tasks: category.tasks.map(task => 
-          task.id === taskId ? { ...task, status: newStatus } : task
-        ),
-      }));
-    });
-
     try {
-      await fetch(`${API_URL}/api/tasks/${taskId}/status`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ status: newStatus }),
-      });
+      await apiClient.put(`/api/tasks/${taskId}/status`, { status: newStatus });
     } catch (error) {
-      console.error("更新任务状态时出错:", error);
+      console.error('更新任务状态失败:', error);
+      // 可以在这里向上抛出错误，以便调用者知道失败了
+      throw error;
     }
   };
 
-  if (isLoading) return <div>正在加载...</div>;
-  if (error) return <div>错误: {error}</div>;
+  // 新增：如果未认证，则显示登录页面
+  if (!isAuthenticated) {
+    return (
+      <ThemeProvider theme={darkTheme}>
+        <CssBaseline />
+        <Login onLoginSuccess={handleLoginSuccess} />
+      </ThemeProvider>
+    );
+  }
+
+  if (isLoading) {
+    return (
+      <ThemeProvider theme={darkTheme}>
+        <CssBaseline />
+        <Box display="flex" justifyContent="center" alignItems="center" height="100vh">
+          <CircularProgress />
+          <Typography variant="h6" color="textSecondary" style={{ marginLeft: 16 }}>
+            正在加载，请稍候...
+          </Typography>
+        </Box>
+      </ThemeProvider>
+    );
+  }
+
+  if (error) {
+    return (
+      <ThemeProvider theme={darkTheme}>
+        <CssBaseline />
+        <Box display="flex" flexDirection="column" alignItems="center" justifyContent="center" height="100vh">
+          <Typography variant="h6" color="error">
+            错误: {error}
+          </Typography>
+          <Typography variant="body1" color="textSecondary" align="center" style={{ maxWidth: 600, marginTop: 16 }}>
+            请检查您的网络连接，或稍后重试。如果问题仍然存在，请联系管理员。
+          </Typography>
+        </Box>
+      </ThemeProvider>
+    );
+  }
 
   return (
     <ThemeProvider theme={darkTheme}>
@@ -214,7 +229,6 @@ function App() {
         selectedTask={selectedTask}
         onTaskSelect={handleSelectTask}
         allAnnotations={allAnnotations}
-        // onImportAnnotations={handleImportAnnotations} // 注释掉
         onSaveAnnotations={handleSaveAnnotations}
         onDeleteAnnotations={handleDeleteAnnotations}
         editingAnnotations={editingAnnotations}

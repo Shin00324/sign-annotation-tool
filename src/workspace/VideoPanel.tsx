@@ -1,16 +1,9 @@
-import { useRef, useState, useEffect, useCallback } from 'react';
-import { Box, Paper, Typography, Button } from '@mui/material';
+import React, { useRef, useEffect, useState, useCallback } from 'react';
+import { Paper, Typography, Box, Button, CircularProgress } from '@mui/material';
 import { Save, Trash2 } from 'lucide-react';
-import type { Annotation, Task } from '../data/types';
 import { TimelineEditor } from './TimelineEditor';
-import React from 'react';
-
-const R2_BASE_URL = "https://pub-1614b7bb5b3540b9898ae99f84787635.r2.dev/";
-
-const getVideoUrl = (videoPath: string) => {
-  if (videoPath.startsWith('http')) return videoPath;
-  return `${R2_BASE_URL.replace(/\/$/, '')}/${videoPath}`;
-};
+import type { Annotation, Task } from '../data/types';
+import apiClient from '../api'; // 新增
 
 interface VideoPanelProps {
   task: Task | null;
@@ -35,9 +28,29 @@ export const VideoPanel = ({
 }: VideoPanelProps) => {
   const videoRef = useRef<HTMLVideoElement>(null);
   const [isDirty, setIsDirty] = useState(false);
+  const [videoUrl, setVideoUrl] = useState<string | null>(null); // 新增
+  const [videoLoading, setVideoLoading] = useState(false); // 新增
+  const [videoError, setVideoError] = useState<string | null>(null); // 新增
 
   useEffect(() => {
     setIsDirty(false);
+    setVideoUrl(null); // 任务切换时清空旧的视频URL
+    setVideoError(null);
+
+    if (task) {
+      setVideoLoading(true);
+      apiClient.get(`/api/signed-video-url/${task.id}`)
+        .then(response => {
+          setVideoUrl(response.data.url);
+        })
+        .catch(error => {
+          console.error("获取视频URL失败:", error);
+          setVideoError("无法加载视频，请检查网络或联系管理员。");
+        })
+        .finally(() => {
+          setVideoLoading(false);
+        });
+    }
   }, [task]);
 
   const handleVideoMetadataLoaded = () => {
@@ -65,7 +78,6 @@ export const VideoPanel = ({
   const handleSave = () => {
     if (task) {
       onSaveAnnotations(task.id, annotations);
-      // alert 已被移除，因为现在有全局遮罩
       setIsDirty(false);
     }
   };
@@ -89,16 +101,22 @@ export const VideoPanel = ({
       </Typography>
       {task ? (
         <Box sx={{ display: 'flex', flexDirection: 'column', flexGrow: 1, minHeight: 0 }}>
-          <Box sx={{ backgroundColor: '#000', mb: 2, flexShrink: 0 }}>
-            <video
-              ref={videoRef}
-              controls
-              width="100%"
-              style={{ display: 'block', maxHeight: '60vh' }}
-              key={task.id}
-              src={getVideoUrl(task.video)}
-              onLoadedMetadata={handleVideoMetadataLoaded}
-            />
+          <Box sx={{ flexGrow: 1, backgroundColor: '#000', display: 'flex', justifyContent: 'center', alignItems: 'center', position: 'relative', minHeight: 300 }}>
+            {videoLoading && <CircularProgress color="inherit" sx={{ color: 'white' }} />}
+            {videoError && <Typography sx={{ color: 'red' }}>{videoError}</Typography>}
+            {videoUrl && !videoError && (
+              <video
+                ref={videoRef}
+                key={videoUrl} // 使用key确保在URL变化时重新渲染video元素
+                controls
+                src={videoUrl}
+                onLoadedMetadata={handleVideoMetadataLoaded}
+                style={{ maxWidth: '100%', maxHeight: '100%', display: videoLoading ? 'none' : 'block' }}
+              />
+            )}
+            {!videoUrl && !videoLoading && !videoError && (
+              <Typography sx={{ color: 'grey.500' }}>视频加载中...</Typography>
+            )}
           </Box>
 
           <TimelineEditor
@@ -108,13 +126,13 @@ export const VideoPanel = ({
             onSeek={handleSeek}
           />
 
-          <Box sx={{ mt: 'auto', pt: 2, display: 'flex', justifyContent: 'flex-end', gap: 2 }}>
+          <Box sx={{ display: 'flex', justifyContent: 'flex-end', gap: 2, p: 1, flexShrink: 0 }}>
             <Button
               variant="outlined"
               color="error"
               startIcon={<Trash2 />}
               onClick={handleDelete}
-              disabled={!task || task.status === '待处理' || isSubmitting} // 更新禁用逻辑
+              disabled={isSubmitting}
             >
               删除标记
             </Button>
@@ -123,15 +141,15 @@ export const VideoPanel = ({
               color="primary"
               startIcon={<Save />}
               onClick={handleSave}
-              disabled={!isDirty || isSubmitting} // 更新禁用逻辑
+              disabled={!isDirty || isSubmitting}
             >
               标注完成
             </Button>
           </Box>
         </Box>
       ) : (
-        <Box sx={{ display: "flex", justifyContent: "center", alignItems: "center", height: "100%" }}>
-          <Typography>请在左侧选择一个任务以开始</Typography>
+        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', color: 'text.secondary' }}>
+          <Typography>请从左侧选择一个任务开始标注</Typography>
         </Box>
       )}
     </Paper>
