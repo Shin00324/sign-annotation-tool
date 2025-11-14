@@ -166,7 +166,7 @@ async function startServer() {
 
       // --- 新增时间校准逻辑 ---
       try {
-        const response = await fetch('http://worldtimeapi.org/api/timezone/Etc/UTC');
+        const response = await fetch('https://worldtimeapi.org/api/timezone/Etc/UTC');
         const data = await response.json();
         const trueUtcTime = new Date(data.utc_datetime).getTime();
         const serverTime = new Date().getTime();
