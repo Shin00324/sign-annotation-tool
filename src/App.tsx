@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { ThemeProvider, createTheme, CssBaseline, Box, CircularProgress, Typography } from '@mui/material';
 import { io } from 'socket.io-client';
 import { AppLayout } from './layout/AppLayout';
@@ -148,12 +148,7 @@ function App() {
 
       // 如果删除的是当前选中的任务，则清空编辑区
       if (selectedTask?.id === taskId) {
-        const task = taskCategories.flatMap(cat => cat.tasks).find(t => t.id === taskId);
-        if (task && videoRef.current) { // videoRef 需要从 VideoPanel 传递上来
-           handleGenerateDefaultAnnotations(task, videoRef.current.duration);
-        } else {
-           setEditingAnnotations([]);
-        }
+        setEditingAnnotations([]); // 直接清空即可
       }
     } catch (error) {
       console.error('删除或重置标注失败:', error);
