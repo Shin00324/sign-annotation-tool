@@ -1,6 +1,6 @@
 import React, { useRef, useState, useEffect, useCallback } from 'react';
 import { Box, Paper, Typography, Button, CircularProgress, Alert } from '@mui/material';
-import { Save, Delete, Replay } from 'lucide-react';
+import { Save, Delete, RotateCcw } from 'lucide-react';
 import { TimelineEditor } from './TimelineEditor';
 import apiClient from '../api';
 import type { Annotation, Task } from '../data/types';
@@ -114,7 +114,7 @@ export const VideoPanel = ({
             <Button
               variant="outlined"
               color="error"
-              startIcon={task.status === '已完成' ? <Replay /> : <Delete />}
+              startIcon={task.status === '已完成' ? <RotateCcw /> : <Delete />}
               onClick={handleDelete}
               disabled={isSubmitting}
             >
