@@ -31,13 +31,12 @@ export const VideoPanel = ({
   const [videoUrl, setVideoUrl] = useState<string | null>(null);
   const [videoLoading, setVideoLoading] = useState(false);
   const [videoError, setVideoError] = useState<string | null>(null);
-  const [videoDuration, setVideoDuration] = useState<number>(0); // 新增：持久化视频时长
+  const [videoDuration, setVideoDuration] = useState<number>(0);
 
   useEffect(() => {
     setIsDirty(false);
     setVideoUrl(null);
     setVideoError(null);
-    // 注意：此处不再重置 videoDuration，以防止时间轴闪烁
 
     if (task) {
       setVideoLoading(true);
@@ -53,7 +52,6 @@ export const VideoPanel = ({
           setVideoLoading(false);
         });
     } else {
-      // 仅当没有选中任何任务时，才重置时长
       setVideoDuration(0);
     }
   }, [task]);
@@ -61,7 +59,7 @@ export const VideoPanel = ({
   const handleVideoMetadataLoaded = () => {
     if (videoRef.current && task) {
       const newDuration = videoRef.current.duration;
-      setVideoDuration(newDuration); // 更新时长状态
+      setVideoDuration(newDuration);
       onGenerateDefaultAnnotations(task, newDuration);
     }
   };
@@ -142,7 +140,11 @@ export const VideoPanel = ({
                 controls
                 src={videoUrl}
                 onLoadedMetadata={handleVideoMetadataLoaded}
-                style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain', visibility: isSubmitting ? 'hidden' : 'visible' }}
+                style={{ 
+                  width: '100%', 
+                  height: 'auto', 
+                  visibility: isSubmitting ? 'hidden' : 'visible' 
+                }}
               />
             )}
             {!videoLoading && !videoUrl && !videoError && !isSubmitting && (
