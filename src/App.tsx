@@ -85,8 +85,10 @@ function App() {
   };
 
   const handleGenerateDefaultAnnotations = (task: Task, videoDuration: number) => {
-    if (task.status === '已完成' && editingAnnotations.length > 0) {
-      return; // 如果任务已完成且已有标注，则不生成默认值
+    // 只要任务是“已完成”状态，就直接返回，绝不生成默认标注。
+    // 这样可以防止异步状态更新问题导致已保存的标注被覆盖。
+    if (task.status === '已完成') {
+      return;
     }
 
     const glossCount = task.glosses.length;
