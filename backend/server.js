@@ -166,11 +166,20 @@ async function startServer() {
 
       // --- 新增时间校准逻辑 ---
       try {
-        const response = await fetch('https://worldtimeapi.org/api/timezone/Etc/UTC');
-        const data = await response.json();
-        const trueUtcTime = new Date(data.utc_datetime).getTime();
+        // 向一个高可用的服务发送 HEAD 请求
+        const response = await fetch('https://www.baidu.com', { method: 'HEAD' });
+        
+        // 从响应头中获取 Date 字段
+        const dateHeader = response.headers.get('date');
+        if (!dateHeader) {
+            throw new Error('Date header not found in response from baidu.');
+        }
+
+        const trueUtcTime = new Date(dateHeader).getTime();
         const serverTime = new Date().getTime();
         s3.config.systemClockOffset = trueUtcTime - serverTime;
+        console.log(`Time calibrated using baidu. Offset: ${s3.config.systemClockOffset}ms`);
+
       } catch (timeError) {
         console.error("Warning: Failed to fetch true UTC time. Relying on server clock.", timeError);
         s3.config.systemClockOffset = 0; // 如果获取失败，则退回原样
