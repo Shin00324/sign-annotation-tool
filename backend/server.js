@@ -21,10 +21,10 @@ const JWT_SECRET = process.env.JWT_SECRET || 'your-super-secret-key-for-jwt';
 const APP_PASSWORD = process.env.APP_PASSWORD || '20251114'; // 在这里设置您的访问密码
 
 // Cloudflare R2 配置
-const R2_ACCOUNT_ID = process.env.R2_ACCOUNT_ID || '36f7dc084cca7d3a1b25cf000ec05767';
-const R2_ACCESS_KEY_ID = process.env.R2_ACCESS_KEY_ID || 'c533c1e72a2e1e706cf0461460932b76';
-const R2_SECRET_ACCESS_KEY = process.env.R2_SECRET_ACCESS_KEY || '9ec46afd4a56000fafcb41cfc1df3210b71583c103ffe43a391524cef31c0d92';
-const R2_BUCKET_NAME = process.env.R2_BUCKET_NAME || 'sign-annotation-videos';
+const R2_ACCOUNT_ID = process.env.R2_ACCOUNT_ID ;
+const R2_ACCESS_KEY_ID = process.env.R2_ACCESS_KEY_ID ;
+const R2_SECRET_ACCESS_KEY = process.env.R2_SECRET_ACCESS_KEY;
+const R2_BUCKET_NAME = process.env.R2_BUCKET_NAME;
 
 const s3 = new S3Client({
   region: "auto",
