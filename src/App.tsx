@@ -125,7 +125,7 @@ function App() {
       await apiClient.delete(`/api/tasks/${taskId}/annotations`);
       
       // 2. 导入新的标注
-      await apiClient.post('/api/annotations/import', annotationsToSave);
+      await apiClient.post('/api/annotations/import', annotationsWithPermanentIds);
 
       // 3. 更新任务状态
       await handleUpdateTaskStatus(taskId, '已完成');
