@@ -222,7 +222,7 @@ async function startServer() {
       for (const annotation of annotations) {
         await client.query(
           'INSERT INTO annotations (id, "taskId", gloss, "startTime", "endTime") VALUES ($1, $2, $3, $4, $5)',
-          [anno.id, anno.taskId, anno.gloss, anno.startTime, anno.endTime]
+          [annotation.id, annotation.taskId, annotation.gloss, annotation.startTime, annotation.endTime]
         );
       }
       await client.query('COMMIT');
