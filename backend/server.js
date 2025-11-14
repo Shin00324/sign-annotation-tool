@@ -17,8 +17,8 @@ const { Pool } = pg;
 
 // --- 安全配置 ---
 // 建议将这些值存储在 .env 文件中，并从 process.env 读取
-const JWT_SECRET = process.env.JWT_SECRET || 'your-super-secret-key-for-jwt';
-const APP_PASSWORD = process.env.APP_PASSWORD || '20251114'; // 在这里设置您的访问密码
+const JWT_SECRET = process.env.JWT_SECRET ;
+const APP_PASSWORD = process.env.APP_PASSWORD; // 在这里设置您的访问密码
 
 // Cloudflare R2 配置
 const R2_ACCOUNT_ID = process.env.R2_ACCOUNT_ID ;
