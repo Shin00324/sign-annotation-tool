@@ -116,6 +116,11 @@ function App() {
   const handleSaveAnnotations = async (taskId: string, annotationsToSave: Annotation[]) => {
     setIsSubmitting(true);
     try {
+        // 关键修复：在保存前，为所有标注生成新的、永久的ID
+      const annotationsWithPermanentIds = annotationsToSave.map(anno => ({
+        ...anno,
+        id: `anno_${Date.now()}_${Math.random()}`
+      }));
       // 1. 先删除旧的标注
       await apiClient.delete(`/api/tasks/${taskId}/annotations`);
       
